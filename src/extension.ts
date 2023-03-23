@@ -1,26 +1,63 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+
 export function activate(context: vscode.ExtensionContext) {
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "aes-decrypter" is now active!');
+    let setKeyDisposable = vscode.commands.registerCommand('extension.setKey', async () => {
+        const encryptionKey = await vscode.window.showInputBox({ prompt: 'Enter the encryption key' });
+        if (!encryptionKey) {
+            return;
+        }
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	let disposable = vscode.commands.registerCommand('aes-decrypter.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from AES Decrypter!');
-	});
+        const config = vscode.workspace.getConfiguration('encryption');
+        await config.update('key', encryptionKey, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage('Encryption key saved.');
+    });
 
-	context.subscriptions.push(disposable);
+    let setIVDisposable = vscode.commands.registerCommand('extension.setIV', async () => {
+        const encryptionIV = await vscode.window.showInputBox({ prompt: 'Enter the encryption IV' });
+        if (!encryptionIV) {
+            return;
+        }
+
+        const config = vscode.workspace.getConfiguration('encryption');
+        await config.update('iv', encryptionIV, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage('Encryption IV saved.');
+    });
+
+    let decryptDisposable = vscode.commands.registerCommand('extension.decrypt', async () => {
+        const config = vscode.workspace.getConfiguration('encryption');
+        const encryptionKey = config.get('key') as string;
+        const encryptionIV = config.get('iv') as string;
+
+        if (!encryptionKey || !encryptionIV) {
+            vscode.window.showErrorMessage('Encryption key or IV not set.');
+            return;
+        }
+
+        const encryptedText = await vscode.window.showInputBox({ prompt: 'Paste the encrypted text' });
+        if (!encryptedText) {
+            return;
+        }
+
+        try {
+            const decryptedText = decrypt(encryptedText, encryptionKey, encryptionIV);
+            vscode.window.showInformationMessage(`Decrypted text: ${decryptedText}`);
+        } catch (error) {
+            vscode.window.showErrorMessage('Failed to decrypt the text.');
+        }
+    });
+
+    context.subscriptions.push(setKeyDisposable, setIVDisposable, decryptDisposable);
 }
 
-// This method is called when your extension is deactivated
+
 export function deactivate() {}
+
+function decrypt(encryptedText: string, key: string, iv: string): string {
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(key, 'hex'), Buffer.from(iv, 'hex'));
+    let decrypted = decipher.update(Buffer.from(encryptedText, 'hex'));
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+}
